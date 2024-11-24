@@ -8,6 +8,7 @@ from tqdm import tqdm
 import llm_translate
 from util.ReadWriteLock import ReadWriteLock
 from util.is_cjk_str import is_cjk_str
+from util.sakura_util import sakura_strip
 
 WORKING_DIR = 'w'
 IN_FILE = 'ManualTransFile.json'
@@ -54,13 +55,15 @@ async def trans_task(endpoint, task_id, session):
             await g_rw_lock.release_write()
             continue
 
+        cur_trans = sakura_strip(cur_text, cur_trans)
+
         await g_rw_lock.acquire_write()
         g_data[cur_text] = cur_trans
         g_pbar.update(1)
         g_token_count += usage['completion_tokens']
         elapsed_time = (asyncio.get_event_loop().time() - g_start_time)
         token_speed = g_token_count / elapsed_time if elapsed_time > 0 else 0
-        g_pbar.set_postfix(spd=f'{token_speed:.2f} t/s')
+        g_pbar.set_postfix(tg=f'{token_speed:.2f}t/s')
         if len(g_data) % 100 == 0:
             with open(os.path.join(folder, PROGRESS_FILE), 'w', encoding='utf8') as f:
                 json.dump(g_data, f, ensure_ascii=False, indent=4)
