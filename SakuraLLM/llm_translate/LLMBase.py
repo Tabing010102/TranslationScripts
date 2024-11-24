@@ -19,6 +19,9 @@ class LLMBase:
             "repetition_penalty": 1.0,
             "stream": False,
         }
-        async with self.session.post(self.endpoint_url + "/chat/completions", json=req, encoding='utf8') as response:
+        headers = {
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+        async with self.session.post(self.endpoint_url, json=req, headers=headers) as response:
             response = await response.json()
             return response['choices'][0]['message']['content'], response['usage']
