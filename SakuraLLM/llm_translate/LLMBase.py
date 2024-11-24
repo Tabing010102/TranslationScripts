@@ -1,3 +1,6 @@
+import json
+
+
 class LLMBase:
     def __init__(self, endpoint_url, session):
         self.endpoint_url = endpoint_url
@@ -19,9 +22,10 @@ class LLMBase:
             "repetition_penalty": 1.0,
             "stream": False,
         }
+        data = json.dumps(req, ensure_ascii=False)
         headers = {
             'Content-Type': 'application/json; charset=utf-8'
         }
-        async with self.session.post(self.endpoint_url, json=req, headers=headers) as response:
+        async with self.session.post(self.endpoint_url, data=data, headers=headers) as response:
             response = await response.json()
             return response['choices'][0]['message']['content'], response['usage']

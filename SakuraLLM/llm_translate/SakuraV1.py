@@ -46,7 +46,7 @@ def make_messages(text, history_text, gpt_dict):
     return messages
 
 
-def get_user_prompt(text, gpt_dict, dict_match_original_text=False):
+def get_user_prompt(text, gpt_dict, dict_match_original_text=True):
     gpt_dict_text_list = []
     if gpt_dict:
         for gpt in gpt_dict:
@@ -60,7 +60,7 @@ def get_user_prompt(text, gpt_dict, dict_match_original_text=False):
                     single = f"{src}->{dst}"
                 gpt_dict_text_list.append(single)
     gpt_dict_raw_text = "\n".join(gpt_dict_text_list)
-    has_gpt_dict = gpt_dict and len(gpt_dict) > 0
+    has_gpt_dict = gpt_dict and len(gpt_dict_text_list) > 0
 
     if has_gpt_dict:
         user_prompt = "根据以下术语表（可以为空）：\n" + gpt_dict_raw_text + "\n" + "将下面的日文文本根据对应关系和备注翻译成中文：" + text

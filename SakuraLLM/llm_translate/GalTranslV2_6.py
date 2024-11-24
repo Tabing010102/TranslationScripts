@@ -46,7 +46,7 @@ def make_messages(text, history_text, gpt_dict):
     return messages
 
 
-def get_user_prompt(text, gpt_dict, dict_match_original_text=False):
+def get_user_prompt(text, gpt_dict, dict_match_original_text=True):
     gpt_dict_text_list = []
     if gpt_dict:
         for gpt in gpt_dict:
