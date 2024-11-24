@@ -47,10 +47,10 @@ async def trans_task(endpoint, task_id, session):
 
         try:
             cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-        except Exception as e:
-            print(f"Task #{task_id} failed to translate {cur_text}: {e}")
+        except Exception as ex:
+            print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
             await g_rw_lock.acquire_write()
-            del g_data[cur_text]
+            g_data.pop(cur_text)
             g_failed_lines.append(cur_text)
             await g_rw_lock.release_write()
             continue
@@ -86,8 +86,8 @@ def init_global_data(folder):
                     g_dict.append({"src": k, "dst": v[0]})
                 else:
                     g_dict.append({"src": k, "dst": v[0], "info": v[1]})
-    except:
-        print("load dict failed")
+    except Exception as ex:
+        print(f"{folder} load dict failed, {ex}")
         g_dict = None
 
     with open(os.path.join(folder, IN_FILE), encoding='utf8') as f:
@@ -95,14 +95,18 @@ def init_global_data(folder):
     try:
         with open(os.path.join(folder, PROGRESS_FILE), encoding='utf8') as f:
             g_data = json.load(f)
-    except:
-        print("load progress failed")
+        empty_keys = [k for k, v in g_data.items() if not v]
+        for k in empty_keys:
+            g_data.pop(k)
+    except Exception as ex:
+        print(f"{folder} load progress failed: {ex}")
         g_data = {}
     for k, v in g_ori_data.items():
         if is_cjk_str(k) and k not in g_data:
             g_un_trans_data.append(k)
 
-    g_pbar = tqdm(total=len(g_un_trans_data), desc=f'Translating {folder}', leave=True, ncols=100, unit='line', mininterval=1)
+    folder_name = folder[:12] + '...' if len(folder) > 15 else folder
+    g_pbar = tqdm(total=len(g_un_trans_data), desc=f'Translating {folder_name}', leave=True, ncols=100, unit='ln')
     g_token_count = 0
     g_start_time = asyncio.get_event_loop().time()
     g_failed_lines = []
