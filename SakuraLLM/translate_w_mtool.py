@@ -20,6 +20,7 @@ ENDPOINTS = [
 ]
 TIMEOUT_SECONDS = 30
 MODEL_NAME = 'SakuraV1'
+TQDM_MIN_INTERVAL = 1.0
 
 g_rw_lock = ReadWriteLock()
 g_ori_data = {}
@@ -29,11 +30,13 @@ g_dict = []
 g_pbar = None
 g_token_count = 0
 g_start_time = None
+g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
 g_failed_lines = []
 
 
 async def trans_task(endpoint, task_id, session):
-    global g_rw_lock, g_data, g_un_trans_data, g_dict, g_token_count, g_start_time, g_pbar, g_failed_lines
+    global g_rw_lock, g_data, g_un_trans_data, g_dict, g_token_count, g_start_time, g_pbar, g_failed_lines, \
+        g_tqdm_last_set_postfix_time
 
     translate_instance = llm_translate.get_instance(MODEL_NAME)(endpoint, session)
 
@@ -41,6 +44,7 @@ async def trans_task(endpoint, task_id, session):
         await g_rw_lock.acquire_write()
         cur_text = next((k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()), None)
         if cur_text is None:
+            await g_rw_lock.release_write()
             break
         g_data[cur_text] = None
         await g_rw_lock.release_write()
@@ -59,11 +63,13 @@ async def trans_task(endpoint, task_id, session):
 
         await g_rw_lock.acquire_write()
         g_data[cur_text] = cur_trans
-        g_pbar.update(1)
+        g_pbar.update(len(cur_text))
         g_token_count += usage['completion_tokens']
-        elapsed_time = (asyncio.get_event_loop().time() - g_start_time)
-        token_speed = g_token_count / elapsed_time if elapsed_time > 0 else 0
-        g_pbar.set_postfix(tg=f'{token_speed:.2f}t/s')
+        if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
+            elapsed_time = asyncio.get_event_loop().time() - g_start_time
+            token_speed = g_token_count / elapsed_time if elapsed_time > 0 else 0
+            g_pbar.set_postfix(tg=f'{token_speed:.2f}t/s')
+            g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
         if len(g_data) % 100 == 0:
             with open(os.path.join(folder, PROGRESS_FILE), 'w', encoding='utf8') as f:
                 json.dump(g_data, f, ensure_ascii=False, indent=4)
@@ -106,7 +112,10 @@ def init_global_data(folder):
             g_un_trans_data.append(k)
 
     folder_name = folder[:12] + '...' if len(folder) > 15 else folder
-    g_pbar = tqdm(total=len(g_un_trans_data), desc=f'Translating {folder_name}', leave=True, ncols=100, unit='ln')
+    total_un_trans_chars = sum(len(k) for k in g_un_trans_data)
+    g_pbar = tqdm(total=total_un_trans_chars, desc=f'Translating {folder_name}', leave=True,
+                  unit='ch', mininterval=TQDM_MIN_INTERVAL)
+    g_pbar.set_postfix(tg=f'?t/s')
     g_token_count = 0
     g_start_time = asyncio.get_event_loop().time()
     g_failed_lines = []
@@ -151,5 +160,5 @@ def get_trans_folders(folder):
 
 
 if __name__ == '__main__':
-    for folder in tqdm(get_trans_folders(WORKING_DIR), desc=f'Processing folders', leave=True, ncols=100, unit='dir'):
+    for folder in tqdm(get_trans_folders(WORKING_DIR), desc=f'Processing folders', leave=True, unit='dir'):
         asyncio.run(translate(folder))
