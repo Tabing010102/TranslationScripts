@@ -19,6 +19,7 @@ ENDPOINTS = [
     ['http://127.0.0.1:8080/v1/chat/completions', 16],
 ]
 TIMEOUT_SECONDS = 30
+SKIP_WHEN_FAILED = True
 MODEL_NAME = 'SakuraV1'
 TQDM_MIN_INTERVAL = 1.0
 
@@ -29,13 +30,12 @@ g_un_trans_data = []
 g_dict = []
 g_pbar = None
 g_token_count = 0
-g_start_time = None
 g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
 g_failed_lines = []
 
 
 async def trans_task(endpoint, task_id, session):
-    global g_rw_lock, g_data, g_un_trans_data, g_dict, g_token_count, g_start_time, g_pbar, g_failed_lines, \
+    global g_rw_lock, g_data, g_un_trans_data, g_dict, g_token_count, g_pbar, g_failed_lines, \
         g_tqdm_last_set_postfix_time
 
     translate_instance = llm_translate.get_instance(MODEL_NAME)(endpoint, session)
@@ -49,15 +49,25 @@ async def trans_task(endpoint, task_id, session):
         g_data[cur_text] = None
         await g_rw_lock.release_write()
 
-        try:
-            cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-        except Exception as ex:
-            print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
-            await g_rw_lock.acquire_write()
-            g_data.pop(cur_text)
-            g_failed_lines.append(cur_text)
-            await g_rw_lock.release_write()
-            continue
+        if SKIP_WHEN_FAILED:
+            try:
+                cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
+            except Exception as ex:
+                print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
+                g_pbar.update(len(cur_text))
+                await g_rw_lock.acquire_write()
+                g_data.pop(cur_text)
+                g_failed_lines.append(cur_text)
+                await g_rw_lock.release_write()
+                continue
+        else:
+            while True:
+                try:
+                    cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
+                    break
+                except Exception as ex:
+                    print(f"Task #{task_id} failed to translate {cur_text}: {ex}\nRetrying in 1s")
+                    await asyncio.sleep(1)
 
         cur_trans = sakura_strip(cur_text, cur_trans)
 
@@ -66,10 +76,11 @@ async def trans_task(endpoint, task_id, session):
         g_pbar.update(len(cur_text))
         g_token_count += usage['completion_tokens']
         if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
-            elapsed_time = asyncio.get_event_loop().time() - g_start_time
+            elapsed_time = asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time
             token_speed = g_token_count / elapsed_time if elapsed_time > 0 else 0
             g_pbar.set_postfix(tg=f'{token_speed:.2f}t/s')
             g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
+            g_token_count = 0
         if len(g_data) % 100 == 0:
             with open(os.path.join(folder, PROGRESS_FILE), 'w', encoding='utf8') as f:
                 json.dump(g_data, f, ensure_ascii=False, indent=4)
@@ -79,7 +90,8 @@ async def trans_task(endpoint, task_id, session):
 
 
 def init_global_data(folder):
-    global g_ori_data, g_data, g_un_trans_data, g_dict, g_pbar, g_token_count, g_start_time, g_failed_lines
+    global g_ori_data, g_data, g_un_trans_data, g_dict, g_pbar, g_token_count,\
+        g_failed_lines, g_tqdm_last_set_postfix_time
 
     g_dict = []
     try:
@@ -117,7 +129,7 @@ def init_global_data(folder):
                   unit='ch', mininterval=TQDM_MIN_INTERVAL)
     g_pbar.set_postfix(tg=f'?t/s')
     g_token_count = 0
-    g_start_time = asyncio.get_event_loop().time()
+    g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
     g_failed_lines = []
 
 

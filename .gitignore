@@ -645,3 +645,5 @@ cython_debug/
 
 # Custom
 **/w
+**/a
+**/g
