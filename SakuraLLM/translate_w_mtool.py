@@ -29,7 +29,7 @@ g_ori_data = {}
 g_data = {}
 g_un_trans_data = []
 g_dict = []
-g_pbar = None
+g_pbar: tqdm
 g_token_rate_calculator = SlidingWindowRateCalculator(10)
 g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
 g_failed_lines = []
@@ -80,20 +80,20 @@ async def trans_task(endpoint, task_id, session):
             g_pbar.set_postfix(tg=f'{g_token_rate_calculator.get_rate()}t/s')
             g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
         if len(g_data) % 100 == 0:
-            with open(os.path.join(folder, PROGRESS_FILE), 'w', encoding='utf8') as f:
+            with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
                 json.dump(g_data, f, ensure_ascii=False, indent=4)
         await g_rw_lock.release_write()
 
     print(f"Task {task_id} finished")
 
 
-def init_global_data(folder):
+def init_global_data(trans_dir):
     global g_ori_data, g_data, g_un_trans_data, g_dict, g_pbar, g_failed_lines, g_tqdm_last_set_postfix_time, \
         g_token_rate_calculator
 
     g_dict = []
     try:
-        with open(os.path.join(folder, DICT_FILE), encoding='utf8') as f:
+        with open(os.path.join(trans_dir, DICT_FILE), encoding='utf8') as f:
             dict_raw = json.load(f)
             for k, v in dict_raw.items():
                 if isinstance(v, str):
@@ -103,27 +103,27 @@ def init_global_data(folder):
                 else:
                     g_dict.append({"src": k, "dst": v[0], "info": v[1]})
     except Exception as ex:
-        print(f"{folder} load dict failed, {ex}")
+        print(f"{trans_dir} load dict failed, {ex}")
         g_dict = None
 
-    with open(os.path.join(folder, IN_FILE), encoding='utf8') as f:
+    with open(os.path.join(trans_dir, IN_FILE), encoding='utf8') as f:
         g_ori_data = json.load(f)
     try:
-        with open(os.path.join(folder, PROGRESS_FILE), encoding='utf8') as f:
+        with open(os.path.join(trans_dir, PROGRESS_FILE), encoding='utf8') as f:
             g_data = json.load(f)
         empty_keys = [k for k, v in g_data.items() if not v]
         for k in empty_keys:
             g_data.pop(k)
     except Exception as ex:
-        print(f"{folder} load progress failed: {ex}")
+        print(f"{trans_dir} load progress failed: {ex}")
         g_data = {}
     for k, v in g_ori_data.items():
         if is_cjk_str(k) and k not in g_data:
             g_un_trans_data.append(k)
 
-    folder_name = folder[:12] + '...' if len(folder) > 15 else folder
+    trans_dir_name = trans_dir[:12] + '...' if len(trans_dir) > 15 else trans_dir
     total_un_trans_chars = sum(len(k) for k in g_un_trans_data)
-    g_pbar = tqdm(total=total_un_trans_chars, desc=f'Translating {folder_name}', leave=True,
+    g_pbar = tqdm(total=total_un_trans_chars, desc=f'Translating {trans_dir_name}', leave=True,
                   unit='ch', mininterval=TQDM_MIN_INTERVAL)
     g_pbar.set_postfix(tg=f'?t/s')
     g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
@@ -131,10 +131,10 @@ def init_global_data(folder):
     g_token_rate_calculator.reset()
 
 
-async def translate(folder):
+async def translate(trans_dir):
     global g_failed_lines
 
-    init_global_data(folder)
+    init_global_data(trans_dir)
 
     tasks = []
     sessions = []
@@ -151,24 +151,24 @@ async def translate(folder):
     for session in sessions:
         await session.close()
     if len(g_failed_lines) == 0:
-        with open(os.path.join(folder, OUT_FILE), 'w', encoding='utf8') as f:
+        with open(os.path.join(trans_dir, OUT_FILE), 'w', encoding='utf8') as f:
             json.dump(g_data, f, ensure_ascii=False, indent=4)
     else:
-        with open(os.path.join(folder, PROGRESS_FILE), 'w', encoding='utf8') as f:
+        with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
             json.dump(g_data, f, ensure_ascii=False, indent=4)
 
 
-def get_trans_folders(folder):
-    matching_folders = []
-    for root, dirs, files in os.walk(folder):
+def get_trans_dirs(working_dir):
+    matching_dirs = []
+    for root, dirs, files in os.walk(working_dir):
         if IN_FILE in files:
             if OUT_FILE in files:
                 print(f'{root} has been translated, skipping')
             else:
-                matching_folders.append(root)
-    return matching_folders
+                matching_dirs.append(root)
+    return matching_dirs
 
 
 if __name__ == '__main__':
-    for folder in tqdm(get_trans_folders(WORKING_DIR), desc=f'Processing folders', leave=True, unit='dir'):
-        asyncio.run(translate(folder))
+    for trans_dir in tqdm(get_trans_dirs(WORKING_DIR), desc=f'Processing dirs', leave=True, unit='dir'):
+        asyncio.run(translate(trans_dir))
