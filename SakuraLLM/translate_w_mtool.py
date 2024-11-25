@@ -114,9 +114,13 @@ def init_global_data(trans_dir):
         empty_keys = [k for k, v in g_data.items() if not v]
         for k in empty_keys:
             g_data.pop(k)
+        un_existed_keys = [k for k in g_data.keys() if k not in g_ori_data]
+        for k in un_existed_keys:
+            g_data.pop(k)
     except Exception as ex:
         print(f"{trans_dir} load progress failed: {ex}")
         g_data = {}
+    g_un_trans_data = []
     for k, v in g_ori_data.items():
         if is_cjk_str(k) and k not in g_data:
             g_un_trans_data.append(k)
@@ -150,6 +154,7 @@ async def translate(trans_dir):
     print(f'Closing sessions')
     for session in sessions:
         await session.close()
+    print(f'Saving results')
     if len(g_failed_lines) == 0:
         with open(os.path.join(trans_dir, OUT_FILE), 'w', encoding='utf8') as f:
             json.dump(g_data, f, ensure_ascii=False, indent=4)
