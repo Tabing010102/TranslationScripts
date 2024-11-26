@@ -1,10 +1,20 @@
 import json
 
+import aiohttp
+
 
 class LLMBase:
-    def __init__(self, endpoint_url, session):
+    def __init__(self, endpoint_url, client_timeout):
         self.endpoint_url = endpoint_url
-        self.session = session
+        self.client_timeout = client_timeout
+        self.session = None
+
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession(timeout=self.client_timeout)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.close()
 
     async def _translate(self, messages: list[dict[str, str]], temperature: float,
                          top_p: float, max_tokens: int, frequency_penalty: float) \

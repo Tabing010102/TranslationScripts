@@ -35,54 +35,55 @@ g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
 g_failed_lines = []
 
 
-async def trans_task(endpoint, task_id, session):
+async def trans_task(endpoint, task_id):
     global g_rw_lock, g_data, g_un_trans_data, g_dict, g_pbar, g_failed_lines, g_tqdm_last_set_postfix_time, \
         g_token_rate_calculator
 
-    translate_instance = llm_translate.get_instance(MODEL_NAME)(endpoint, session)
+    session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=TIMEOUT_SECONDS, sock_read=TIMEOUT_SECONDS)
+    async with llm_translate.get_instance(MODEL_NAME)(endpoint, session_timeout) as translate_instance:
 
-    while True:
-        await g_rw_lock.acquire_write()
-        cur_text = next((k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()), None)
-        if cur_text is None:
-            await g_rw_lock.release_write()
-            break
-        g_data[cur_text] = None
-        await g_rw_lock.release_write()
-
-        if SKIP_WHEN_FAILED:
-            try:
-                cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-            except Exception as ex:
-                print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
-                g_pbar.update(len(cur_text))
-                await g_rw_lock.acquire_write()
-                g_data.pop(cur_text)
-                g_failed_lines.append(cur_text)
+        while True:
+            await g_rw_lock.acquire_write()
+            cur_text = next((k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()), None)
+            if cur_text is None:
                 await g_rw_lock.release_write()
-                continue
-        else:
-            while True:
+                break
+            g_data[cur_text] = None
+            await g_rw_lock.release_write()
+
+            if SKIP_WHEN_FAILED:
                 try:
                     cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-                    break
                 except Exception as ex:
-                    print(f"Task #{task_id} failed to translate {cur_text}: {ex}\nRetrying in 1s")
-                    await asyncio.sleep(1)
+                    print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
+                    g_pbar.update(len(cur_text))
+                    await g_rw_lock.acquire_write()
+                    g_data.pop(cur_text)
+                    g_failed_lines.append(cur_text)
+                    await g_rw_lock.release_write()
+                    continue
+            else:
+                while True:
+                    try:
+                        cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
+                        break
+                    except Exception as ex:
+                        print(f"Task #{task_id} failed to translate {cur_text}: {ex}\nRetrying in 1s")
+                        await asyncio.sleep(1)
 
-        cur_trans = sakura_strip(cur_text, cur_trans)
+            cur_trans = sakura_strip(cur_text, cur_trans)
 
-        await g_rw_lock.acquire_write()
-        g_data[cur_text] = cur_trans
-        g_pbar.update(len(cur_text))
-        g_token_rate_calculator.add_count(usage['completion_tokens'])
-        if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
-            g_pbar.set_postfix(tg=f'{g_token_rate_calculator.get_rate()}t/s')
-            g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
-        if len(g_data) % 100 == 0:
-            with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
-                json.dump(g_data, f, ensure_ascii=False, indent=4)
-        await g_rw_lock.release_write()
+            await g_rw_lock.acquire_write()
+            g_data[cur_text] = cur_trans
+            g_pbar.update(len(cur_text))
+            g_token_rate_calculator.add_count(usage['completion_tokens'])
+            if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
+                g_pbar.set_postfix(tg=f'{g_token_rate_calculator.get_rate()}t/s')
+                g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
+            if len(g_data) % 100 == 0:
+                with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
+                    json.dump(g_data, f, ensure_ascii=False, indent=4)
+            await g_rw_lock.release_write()
 
     print(f"Task {task_id} finished")
 
@@ -141,19 +142,12 @@ async def translate(trans_dir):
     init_global_data(trans_dir)
 
     tasks = []
-    sessions = []
     for i in range(len(ENDPOINTS)):
-        session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=TIMEOUT_SECONDS, sock_read=TIMEOUT_SECONDS)
-        session = aiohttp.ClientSession(timeout=session_timeout)
-        sessions.append(session)
         for j in range(ENDPOINTS[i][1]):
-            task = asyncio.create_task(trans_task(ENDPOINTS[i][0], '{:05d}'.format(i * 100 + j), session))
+            task = asyncio.create_task(trans_task(ENDPOINTS[i][0], '{:05d}'.format(i * 100 + j)))
             tasks.append(task)
     print(f'Starting {len(tasks)} tasks')
     await asyncio.gather(*tasks)
-    print(f'Closing sessions')
-    for session in sessions:
-        await session.close()
     print(f'Saving results')
     if len(g_failed_lines) == 0:
         with open(os.path.join(trans_dir, OUT_FILE), 'w', encoding='utf8') as f:

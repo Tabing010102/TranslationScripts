@@ -4,10 +4,16 @@ from llm_translate.LLMBase import LLMBase
 
 
 class GalTranslV2_6(LLMBase):
-    def __init__(self, url, session, use_dynamic_max_tokens=True):
-        super().__init__(url, session)
+    def __init__(self, url, client_timeout, use_dynamic_max_tokens=True):
+        super().__init__(url, client_timeout)
         self.use_dynamic_max_tokens = use_dynamic_max_tokens
         self.max_tokens = 512
+
+    async def __aenter__(self):
+        return await super().__aenter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await super().__aexit__(exc_type, exc_val, exc_tb)
 
     async def translate(self, text: str, history_text: dict[str, str] = None, gpt_dict: list[dict[str, str]] = None,
                         frequency_penalty: float = 0.0) -> tuple[str, dict[str, int]]:
