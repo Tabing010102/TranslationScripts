@@ -4,14 +4,18 @@ import aiohttp
 
 
 class LLMBase:
-    def __init__(self, tr_langs, endpoint_url, client_timeout):
+    def __init__(self, tr_langs, endpoint_url, timeout_seconds):
         self.src_lang, self.dst_lang = tr_langs
         self.endpoint_url = endpoint_url
-        self.client_timeout = client_timeout
+        self.timeout_seconds = timeout_seconds
         self.session = None
 
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession(timeout=self.client_timeout)
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(
+                total=None,
+                sock_connect=self.timeout_seconds,
+                sock_read=self.timeout_seconds))
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

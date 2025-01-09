@@ -9,9 +9,9 @@ LANG_SHORT_ZH_DICT: dict
 LANG_TR_EXAMPLE_DICT: dict
 
 
-class AiNiee(LLMBase):
-    def __init__(self, tr_langs, url, client_timeout, use_dynamic_max_tokens=True):
-        super().__init__(tr_langs, url, client_timeout)
+class AiNieeV5(LLMBase):
+    def __init__(self, tr_langs, url, timeout_seconds, use_dynamic_max_tokens=True):
+        super().__init__(tr_langs, url, timeout_seconds)
 
         from . import Lang
         global LANG_ZH_DICT, LANG_SHORT_ZH_DICT, LANG_TR_EXAMPLE_DICT
@@ -56,8 +56,9 @@ class AiNiee(LLMBase):
     async def translate(self, text: str, history_text: dict[str, str] = None, gpt_dict: list[dict[str, str]] = None,
                         frequency_penalty: float = 0.0) -> tuple[str, dict[str, int]]:
         messages = self.make_messages(text, history_text, gpt_dict)
-        max_tokens = math.ceil(len(text) * 1.5) if self.use_dynamic_max_tokens else self.max_tokens
-        return extract_json_content(await super()._translate(messages, 1.0, 1.0, max_tokens, frequency_penalty))
+        max_tokens = math.ceil((len(text) + 12 + 40) * 1.5) if self.use_dynamic_max_tokens else self.max_tokens
+        result, usage = await super()._translate(messages, 1.0, 1.0, max_tokens, frequency_penalty)
+        return extract_json_content(result), usage
 
     def make_messages(self, text, history_text, gpt_dict):
         if history_text:
@@ -122,20 +123,26 @@ class AiNiee(LLMBase):
                             f"```"
                     }
                 )
-        messages.append(
-            {
-                "role": "user",
-                "content": get_user_prompt(text)
-            }
-        )
+        messages.extend(get_tr_messages(text))
         return messages
 
 
-def get_user_prompt(text, add_ending_assistant_prompt=True):
-    user_prompt = f"###这是你接下来的翻译任务，原文文本如下\n```json\n{{\"0\":\"{text}\"}}\n```"
+def get_tr_messages(text, add_ending_assistant_prompt=True):
+    tr_prompts = [
+        {
+            "role": "user",
+            "content": f"###这是你接下来的翻译任务，原文文本如下\n```json\n{{\"0\":\"{text}\"}}\n```"
+        }
+    ]
     if add_ending_assistant_prompt:
-        user_prompt += f"我完全理解了翻译的要求与原则，我将遵循您的指示进行翻译，以下是对原文的翻译"
-    return user_prompt
+        tr_prompts.append(
+            {
+                "role": "assistant",
+                "content": f"我完全理解了翻译的要求与原则，我将遵循您的指示进行翻译，以下是对原文的翻译"
+            }
+        )
+
+    return tr_prompts
 
 
 def get_dict_str(text, gpt_dict, dict_match_original_text=True):

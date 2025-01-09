@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 
-import aiohttp
 from tqdm import tqdm
 
 import llm_translate
@@ -41,9 +40,8 @@ async def trans_task(endpoint, task_id):
     global g_rw_lock, g_data, g_un_trans_data, g_dict, g_pbar, g_failed_lines, g_tqdm_last_set_postfix_time, \
         g_token_rate_calculator
 
-    session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=TIMEOUT_SECONDS, sock_read=TIMEOUT_SECONDS)
     async with llm_translate.get_instance(MODEL_NAME)((SRC_LANG, DST_LANG),
-                                                      endpoint, session_timeout) as translate_instance:
+                                                      endpoint, TIMEOUT_SECONDS) as translate_instance:
 
         while True:
             await g_rw_lock.acquire_write()

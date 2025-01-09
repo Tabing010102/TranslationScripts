@@ -4,8 +4,8 @@ from .LLMBase import LLMBase
 
 
 class SakuraV1(LLMBase):
-    def __init__(self, tr_langs, url, client_timeout, use_dynamic_max_tokens=True):
-        super().__init__(tr_langs, url, client_timeout)
+    def __init__(self, tr_langs, url, timeout_seconds, use_dynamic_max_tokens=True):
+        super().__init__(tr_langs, url, timeout_seconds)
         from . import Lang
         if self.src_lang != Lang.JA or self.dst_lang != Lang.ZH:
             raise ValueError(f"Unsupported translate langs: {self.src_lang} -> {self.dst_lang}")
