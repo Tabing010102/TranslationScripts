@@ -22,6 +22,8 @@ ENDPOINTS = [
 TIMEOUT_SECONDS = 30
 SKIP_WHEN_FAILED = True
 MODEL_NAME = 'SakuraV1'
+SRC_LANG = llm_translate.Lang.JA
+DST_LANG = llm_translate.Lang.ZH
 TQDM_MIN_INTERVAL = 2.0
 
 g_rw_lock = ReadWriteLock()
@@ -40,7 +42,8 @@ async def trans_task(endpoint, task_id):
         g_token_rate_calculator
 
     session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=TIMEOUT_SECONDS, sock_read=TIMEOUT_SECONDS)
-    async with llm_translate.get_instance(MODEL_NAME)(endpoint, session_timeout) as translate_instance:
+    async with llm_translate.get_instance(MODEL_NAME)((SRC_LANG, DST_LANG),
+                                                      endpoint, session_timeout) as translate_instance:
 
         while True:
             await g_rw_lock.acquire_write()

@@ -1,11 +1,14 @@
 import math
 
+from llm_translate import Lang
 from llm_translate.LLMBase import LLMBase
 
 
 class GalTranslV2_6(LLMBase):
-    def __init__(self, url, client_timeout, use_dynamic_max_tokens=True):
-        super().__init__(url, client_timeout)
+    def __init__(self, tr_langs, url, client_timeout, use_dynamic_max_tokens=True):
+        super().__init__(tr_langs, url, client_timeout)
+        if self.src_lang != Lang.JA or self.dst_lang != Lang.ZH:
+            raise ValueError(f"Unsupported translate langs: {self.src_lang} -> {self.dst_lang}")
         self.use_dynamic_max_tokens = use_dynamic_max_tokens
         self.max_tokens = 512
 

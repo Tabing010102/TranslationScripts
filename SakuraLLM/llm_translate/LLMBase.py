@@ -4,7 +4,8 @@ import aiohttp
 
 
 class LLMBase:
-    def __init__(self, endpoint_url, client_timeout):
+    def __init__(self, tr_langs, endpoint_url, client_timeout):
+        self.src_lang, self.dst_lang = tr_langs
         self.endpoint_url = endpoint_url
         self.client_timeout = client_timeout
         self.session = None

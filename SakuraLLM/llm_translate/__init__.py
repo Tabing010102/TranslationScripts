@@ -1,5 +1,16 @@
+from enum import Enum
+
 from llm_translate.GalTranslV2_6 import GalTranslV2_6
 from llm_translate.SakuraV1 import SakuraV1
+
+
+class Lang(Enum):
+    ZH = 0
+    ZHT = 1
+    JA = 2
+    EN = 3
+    KO = 4
+    RU = 5
 
 
 MODEL_NAMES_DICT = {
