@@ -2,38 +2,44 @@ import json
 import math
 import re
 
-from llm_translate import Lang
-from llm_translate.LLMBase import LLMBase
+from .LLMBase import LLMBase
 
-LANG_ZH_DICT = {
-    Lang.ZH: "简中",
-    Lang.ZHT: "繁中",
-    Lang.JA: "日语",
-    Lang.EN: "英语",
-    Lang.KO: "韩语",
-    Lang.RU: "俄语"
-}
-LANG_SHORT_ZH_DICT = {
-    Lang.ZH: "中",
-    Lang.ZHT: "中",
-    Lang.JA: "日",
-    Lang.EN: "英",
-    Lang.KO: "韩",
-    Lang.RU: "俄"
-}
-LANG_TR_EXAMPLE_DICT = {
-    Lang.ZH: "爱情是灵魂深处的火焰，温暖且永不熄灭。",
-    Lang.ZHT: "愛情是靈魂深處的火焰，溫暖且永不熄滅。",
-    Lang.JA: "愛は魂の深淵にある炎で、暖かくて永遠に消えない。",
-    Lang.EN: "Love is the flame in the depth of the soul, warm and never extinguished.",
-    Lang.KO: "사랑은 영혼 깊숙이 타오르는 불꽃이며, 따뜻하고 영원히 꺼지지 않는다.",
-    Lang.RU: "Любовь - это пламя в глубине души, тёплое и никогда не угасающее."
-}
+LANG_ZH_DICT: dict
+LANG_SHORT_ZH_DICT: dict
+LANG_TR_EXAMPLE_DICT: dict
 
 
-class SakuraV1(LLMBase):
+class AiNiee(LLMBase):
     def __init__(self, tr_langs, url, client_timeout, use_dynamic_max_tokens=True):
         super().__init__(tr_langs, url, client_timeout)
+
+        from . import Lang
+        global LANG_ZH_DICT, LANG_SHORT_ZH_DICT, LANG_TR_EXAMPLE_DICT
+        LANG_ZH_DICT = {
+            Lang.ZH: "简中",
+            Lang.ZHT: "繁中",
+            Lang.JA: "日语",
+            Lang.EN: "英语",
+            Lang.KO: "韩语",
+            Lang.RU: "俄语"
+        }
+        LANG_SHORT_ZH_DICT = {
+            Lang.ZH: "中",
+            Lang.ZHT: "中",
+            Lang.JA: "日",
+            Lang.EN: "英",
+            Lang.KO: "韩",
+            Lang.RU: "俄"
+        }
+        LANG_TR_EXAMPLE_DICT = {
+            Lang.ZH: "爱情是灵魂深处的火焰，温暖且永不熄灭。",
+            Lang.ZHT: "愛情是靈魂深處的火焰，溫暖且永不熄滅。",
+            Lang.JA: "愛は魂の深淵にある炎で、暖かくて永遠に消えない。",
+            Lang.EN: "Love is the flame in the depth of the soul, warm and never extinguished.",
+            Lang.KO: "사랑은 영혼 깊숙이 타오르는 불꽃이며, 따뜻하고 영원히 꺼지지 않는다.",
+            Lang.RU: "Любовь - это пламя в глубине души, тёплое и никогда не угасающее."
+        }
+
         self.src_lang_str = LANG_ZH_DICT[self.src_lang]
         self.dst_lang_str = LANG_ZH_DICT[self.dst_lang]
         self.src_lang_str_short = LANG_SHORT_ZH_DICT[self.src_lang]

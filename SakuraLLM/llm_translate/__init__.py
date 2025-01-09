@@ -1,7 +1,8 @@
 from enum import Enum
 
-from llm_translate.GalTranslV2_6 import GalTranslV2_6
-from llm_translate.SakuraV1 import SakuraV1
+from .AiNiee import AiNiee
+from .GalTranslV2_6 import GalTranslV2_6
+from .SakuraV1 import SakuraV1
 
 
 class Lang(Enum):
@@ -15,7 +16,8 @@ class Lang(Enum):
 
 MODEL_NAMES_DICT = {
     "SakuraV1": SakuraV1,
-    "GalTranslV2_6": GalTranslV2_6
+    "GalTranslV2_6": GalTranslV2_6,
+    "AiNiee": AiNiee
 }
 
 
