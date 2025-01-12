@@ -1,6 +1,7 @@
 import json
 import math
 import re
+from json import JSONDecodeError
 
 from .LLMBase import LLMBase
 
@@ -58,7 +59,10 @@ class AiNieeV5(LLMBase):
         messages = self.make_messages(text, history_text, gpt_dict)
         max_tokens = math.ceil((len(text) + 12 + 40) * 1.5) if self.use_dynamic_max_tokens else self.max_tokens
         result, usage = await super()._translate(messages, 1.0, 1.0, max_tokens, frequency_penalty)
-        return extract_json_content(result), usage
+        try:
+            return extract_json_content(result), usage
+        except Exception as ex:
+            raise ValueError(f"Failed to extract json content from the result：{result}") from ex
 
     def make_messages(self, text, history_text, gpt_dict):
         if history_text:
@@ -164,7 +168,7 @@ def get_dict_str(text, gpt_dict, dict_match_original_text=True):
 def extract_json_content(text):
     patterns = [
         r'```json\s*({[^}]+})\s*```',
-        r'```({[^}]+})\s*```',
+        r'```\s*({[^}]+})\s*```',
         r'{[^}]+}'
     ]
 
@@ -173,7 +177,10 @@ def extract_json_content(text):
         if match:
             try:
                 json_str = match.group(1).strip()
-                json_obj = json.loads(json_str)
+                try:
+                    json_obj = json.loads(json_str)
+                except JSONDecodeError:
+                    json_obj = json.loads(json.dumps(json_str))
                 return json_obj.get("0")
             except json.JSONDecodeError:
                 continue
