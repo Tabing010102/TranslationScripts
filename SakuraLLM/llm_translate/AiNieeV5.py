@@ -176,13 +176,40 @@ def extract_json_content(text):
         match = re.search(pattern, text)
         if match:
             try:
-                json_str = match.group(1).strip()
-                try:
-                    json_obj = json.loads(json_str)
-                except JSONDecodeError:
-                    json_obj = json.loads(json.dumps(json_str))
-                return json_obj.get("0")
-            except json.JSONDecodeError:
+                json_str = match.group(1).strip() if len(match.groups()) > 0 else match.string.strip()
+                return get_json_0_str(json_str)
+            except JSONDecodeError:
                 continue
 
     raise ValueError("No valid json content found in the text")
+
+
+def get_json_0_str(text):
+    try:
+        json_obj = json.loads(text)
+        return json_obj.get("0")
+    except JSONDecodeError:
+        # manual parse
+        text = strip_json_str(text)
+        l_idx = text.find('"0"')
+        l_idx = l_idx + 3
+        while text[l_idx] != '"':
+            l_idx += 1
+        r_idx = text.rfind('"')
+        if l_idx == -1 or r_idx == -1 or l_idx >= r_idx:
+            raise ValueError("No valid json content found in the text")
+        return text[l_idx + 1:r_idx]
+
+
+def strip_json_str(text):
+    first_brace_index = text.find('{')
+    last_brace_index = text.rfind('}')
+
+    if first_brace_index == -1 and last_brace_index == -1:
+        return text
+    elif first_brace_index == -1:
+        return text[:last_brace_index + 1]
+    elif last_brace_index == -1:
+        return text[first_brace_index:]
+    else:
+        return text[first_brace_index:last_brace_index + 1]
