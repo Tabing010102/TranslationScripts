@@ -1,4 +1,6 @@
 def sakura_strip(k: str, v: str) -> str:
+    if k is None or v is None:
+        return ""
     if len(k) < 2 or len(v) < 2:
         return v
     if k[0] != '「' and v[0] == '「':
