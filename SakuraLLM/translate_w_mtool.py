@@ -40,53 +40,81 @@ async def trans_task(endpoint, task_id):
     global g_rw_lock, g_data, g_un_trans_data, g_dict, g_pbar, g_failed_lines, g_tqdm_last_set_postfix_time, \
         g_token_rate_calculator
 
-    async with llm_translate.get_instance(MODEL_NAME)((SRC_LANG, DST_LANG),
-                                                      endpoint, TIMEOUT_SECONDS) as translate_instance:
+    while True:
+        cur_text = None
+        try:
+            async with llm_translate.get_instance(MODEL_NAME)((SRC_LANG, DST_LANG),
+                                                              endpoint, TIMEOUT_SECONDS) as translate_instance:
 
-        while True:
-            await g_rw_lock.acquire_write()
-            cur_text = next((k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()), None)
-            if cur_text is None:
-                await g_rw_lock.release_write()
-                break
-            g_data[cur_text] = None
-            await g_rw_lock.release_write()
-
-            if SKIP_WHEN_FAILED:
-                try:
-                    cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-                except Exception as ex:
-                    print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
-                    g_pbar.update(len(cur_text))
-                    await g_rw_lock.acquire_write()
-                    g_data.pop(cur_text)
-                    g_failed_lines.append(cur_text)
-                    await g_rw_lock.release_write()
-                    continue
-            else:
                 while True:
+                    await g_rw_lock.acquire_write()
                     try:
-                        cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
-                        break
-                    except Exception as ex:
-                        print(f"Task #{task_id} failed to translate {cur_text}: {ex}\nRetrying in 1s")
-                        await asyncio.sleep(1)
+                        cur_text = next((k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()),
+                                        None)
+                        if cur_text is None:
+                            print(f"Task {task_id} finished")
+                            return
+                        g_data[cur_text] = None
+                    finally:
+                        await g_rw_lock.release_write()
 
-            cur_trans = sakura_strip(cur_text, cur_trans)
+                    if SKIP_WHEN_FAILED:
+                        try:
+                            cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
+                        except Exception as ex:
+                            print(f"Task #{task_id} failed to translate {cur_text}: {ex}")
+                            g_pbar.update(len(cur_text))
+                            await g_rw_lock.acquire_write()
+                            try:
+                                g_data.pop(cur_text, None)
+                                g_failed_lines.append(cur_text)
+                            finally:
+                                await g_rw_lock.release_write()
+                            cur_text = None
+                            break
+                    else:
+                        while True:
+                            try:
+                                cur_trans, usage = await translate_instance.translate(cur_text, None, g_dict)
+                                break
+                            except Exception as ex:
+                                print(f"Task #{task_id} failed to translate {cur_text}: {ex}\nRetrying in 1s")
+                                await asyncio.sleep(1)
 
+                    cur_trans = sakura_strip(cur_text, cur_trans)
+
+                    await g_rw_lock.acquire_write()
+                    try:
+                        g_data[cur_text] = cur_trans
+                        g_pbar.update(len(cur_text))
+                        g_token_rate_calculator.add_count(usage['completion_tokens'])
+                        if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
+                            g_pbar.set_postfix(tg=f'{g_token_rate_calculator.get_rate()}t/s')
+                            g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
+                        if len(g_data) % 1000 == 0:
+                            with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
+                                json.dump(g_data, f, ensure_ascii=False, indent=4)
+                    finally:
+                        await g_rw_lock.release_write()
+                    cur_text = None
+        except Exception as ex:
             await g_rw_lock.acquire_write()
-            g_data[cur_text] = cur_trans
-            g_pbar.update(len(cur_text))
-            g_token_rate_calculator.add_count(usage['completion_tokens'])
-            if asyncio.get_event_loop().time() - g_tqdm_last_set_postfix_time > TQDM_MIN_INTERVAL:
-                g_pbar.set_postfix(tg=f'{g_token_rate_calculator.get_rate()}t/s')
-                g_tqdm_last_set_postfix_time = asyncio.get_event_loop().time()
-            if len(g_data) % 100 == 0:
-                with open(os.path.join(trans_dir, PROGRESS_FILE), 'w', encoding='utf8') as f:
-                    json.dump(g_data, f, ensure_ascii=False, indent=4)
-            await g_rw_lock.release_write()
+            try:
+                if cur_text is not None and g_data.get(cur_text) is None:
+                    g_data.pop(cur_text, None)
+                has_pending_work = next(
+                    (k for k in g_un_trans_data if k not in g_failed_lines and k not in g_data.keys()),
+                    None
+                ) is not None
+            finally:
+                await g_rw_lock.release_write()
 
-    print(f"Task {task_id} finished")
+            if not has_pending_work:
+                print(f"Task {task_id} finished")
+                return
+
+            print(f"Task #{task_id} worker crashed on {endpoint}: {ex}\nRestarting in 1s")
+            await asyncio.sleep(1)
 
 
 def init_global_data(trans_dir):
