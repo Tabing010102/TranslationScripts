@@ -1,0 +1,10 @@
+{
+  "ToolRootDir": "/path/to/Output/Exports/ZenLocalizationWorkflow",
+  "RetocCliPath": "/path/to/Output/Exports/retoc_cli/retoc.exe",
+  "UsmapPath": "/path/to/TsunSis-5.3.2-29314046+++UE5+Release-5.3-0196ef29.usmap",
+  "GamePaksDir": "/path/to/TsunSis/TsunSis/Content/Paks",
+  "WorkspaceDir": "/path/to/Output/Exports/TsunSis260503Prod/workspace",
+  "ManualTransFilePath": "/path/to/Output/Exports/TsunSis260503Prod/workspace/ManualTransFile_YYYYMMDD_HHMMSS_translated_YYYYMMDD_HHMMSS/ManualTransFile.json",
+  "RetocVersion": "UE5_3",
+  "AesKey": null
+}
